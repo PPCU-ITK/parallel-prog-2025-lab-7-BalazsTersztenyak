@@ -55,11 +55,14 @@ int main(int argc, const char** argv)
 
   for (int j = 1; j < jmax+2; j++)
     Anew[(j)*(imax+2)+jmax+1] = sin(pi * j / (jmax+1))*expf(-pi);
+  #pragma omp target data map(to:A[0:(imax+2)*(jmax+2)]) map(to:Anew[0:(imax+2)*(jmax+2)])
+  {
   auto t1 = std::chrono::high_resolution_clock::now();
   while ( error > tol && iter < iter_max )
   {
     error = 0.0;
-#pragma omp parallel for reduction(max:error)
+    #pragma omp target teams distribute parallel for reduction(max:error) \
+        map(A[0:(imax+2)*(jmax+2)]) map(Anew[0:(imax+2)*(jmax+2)]) collapse(2)
     for( int j = 1; j < jmax+1; j++ )
     {
       for( int i = 1; i < imax+1; i++)
@@ -69,7 +72,8 @@ int main(int argc, const char** argv)
         error = fmax( error, fabs(Anew[(j)*(imax+2)+i]-A[(j)*(imax+2)+i]));
       }
     }
-#pragma omp parallel for
+    #pragma omp target teams distribute parallel for \
+        map(A[0:(imax+2)*(jmax+2)]) map(Anew[0:(imax+2)*(jmax+2)]) collapse(2)
     for( int j = 1; j < jmax+1; j++ )
     {
       for( int i = 1; i < imax+1; i++)
@@ -81,6 +85,9 @@ int main(int argc, const char** argv)
     iter++;
   }
   auto t2 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> ms_double = t2 - t1;
+  std::cout << ms_double.count() << "ms\n";
+  }
   printf("%5d, %0.6f\n", iter, error);
 
   double err_diff = fabs((100.0*(error/2.421354960840227e-03))-100.0);
@@ -90,8 +97,6 @@ int main(int argc, const char** argv)
   else
     printf("This test is considered FAILED\n");
 
-  std::chrono::duration<double, std::milli> ms_double = t2 - t1;
-  std::cout << ms_double.count() << "ms\n";
 
 
   return 0;
